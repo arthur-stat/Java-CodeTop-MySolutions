@@ -6,3 +6,7 @@
 或许可以从中看出我的代码风格？
 
 [我的力扣主页](https://leetcode.cn/u/6racious-vaughanr63/)
+
+![00](.\images\00.png)
+
+↑ 运行 `python .\REgen_wordcloud.py`，根据各文章标题所生成的关键词图文
