@@ -23,11 +23,30 @@ except ImportError:
 OUTPUT_DIR = "./images"
 TITLE_PNG = os.path.join(OUTPUT_DIR, "00.png")
 
+"""
+根据当前目录下的 .md 标题（文件名 + 文内第一个#标题），
+统计算法类别关键词频次（空格不敏感/英文大小写不敏感），
+生成 PNG 词云： ./images/00.png
+
+依赖：pip install wordcloud pillow
+"""
+
+import sys
+sys.dont_write_bytecode = True
+
+import os
+import re
+from collections import Counter
+
+try:
+    from wordcloud import WordCloud
+except ImportError:
+    raise SystemExit("缺少依赖：wordcloud\n请先安装：pip install wordcloud pillow")
+
+OUTPUT_DIR = "./images"
+TITLE_PNG = os.path.join(OUTPUT_DIR, "00.png")
+
 # ================ 关键词分类（可自行扩展/修改） ================
-# 设计说明：
-# - 左边是“规范类别名”（会出现在词云里）
-# - 右边是该类的所有“变体/同义词/常见写法”
-# - 匹配规则：统一转小写 + 去空格 后做子串计数，因此“区间 dp”“区间DP”“区间dp”都能匹配
 KW_MAP = {
     # —— 搜索 / 图 —— 
     "BFS": ["bfs", "广度优先", "广搜", "层序遍历"],
@@ -111,9 +130,6 @@ KW_MAP = {
 }
 
 # ================ 字体（可选） ================
-# 中文词云需要 CJK 字体；Windows 上你可以用：
-# C:\Windows\Fonts\msyh.ttc 或 simhei.ttf
-# 若留空，wordcloud 会用默认字体，中文可能显示为方框
 FONT_CANDIDATES = [
     r"C:\Windows\Fonts\msyh.ttc",
     r"C:\Windows\Fonts\simhei.ttf",
@@ -126,7 +142,7 @@ def pick_font():
     for p in FONT_CANDIDATES:
         if os.path.exists(p):
             return p
-    return None  # 用默认（英文 OK，中文可能不完美）
+    return None
 
 # ================ 工具函数 ================
 def list_markdown_files():
@@ -143,12 +159,6 @@ def first_md_header(text: str) -> str:
     return ""
 
 def normalize_for_match(s: str) -> str:
-    """
-    归一化匹配文本：
-    - 全部转小写
-    - 全角转半角
-    - 删除所有空白（空格不敏感）
-    """
     s2 = s.lower()
 
     def to_halfwidth(u):
@@ -167,32 +177,22 @@ def normalize_kw(v: str) -> str:
     return re.sub(r"\s+", "", v.lower())
 
 def build_variant_index():
-    """
-    构造：规范标签 -> 变体列表（统一小写+去空格）
-    同时返回“显示用”的规范标签列表
-    """
     idx = {}
     for canon, vars_ in KW_MAP.items():
         idx[canon] = [normalize_kw(v) for v in vars_ if v.strip()]
     return idx
 
-# ================ 统计主流程（仅标题） ================
+# --------------- 原有汇总函数（保留，不再在 main 中使用） ---------------
 def collect_titles_text():
     chunks = []
     for f in list_markdown_files():
-        # 文件名（去扩展名）
         chunks.append(os.path.splitext(os.path.basename(f))[0])
-        # 文内第一条 Markdown 标题
         h1 = first_md_header(read_file(f))
         if h1:
             chunks.append(h1)
     return "\n".join(chunks)
 
 def count_by_categories(text: str) -> Counter:
-    """
-    在“去空格+小写”的文本上，对每个类别的所有变体进行子串计数并累加。
-    不重叠计数：str.count 的语义。
-    """
     normalized_text = normalize_for_match(text)
     idx = build_variant_index()
 
@@ -207,14 +207,36 @@ def count_by_categories(text: str) -> Counter:
             freq[canon] = total
     return freq
 
+# --------------- 新增：按文件去重统计（同一文件同一分类最多+1） ---------------
+def iterate_file_title_texts():
+    """逐文件返回“文件名 + 第一条H1”的归一化文本"""
+    for f in list_markdown_files():
+        name = os.path.splitext(os.path.basename(f))[0]
+        # h1 = first_md_header(read_file(f)) or ""
+        # yield normalize_for_match(name + "\n" + h1)
+        yield normalize_for_match(name)
+
+def count_by_categories_one_per_file() -> Counter:
+    """
+    对每个文件：若某类别任一变体命中，则该类别计数 +1（同一文件最多一次）。
+    """
+    idx = build_variant_index()
+    freq = Counter()
+    for norm in iterate_file_title_texts():
+        matched = set()
+        for canon, variants in idx.items():
+            if any(v and v in norm for v in variants):
+                matched.add(canon)
+        for canon in matched:
+            freq[canon] += 1
+    return freq
+
 # ================ 生成词云（PNG） ================
 def make_wordcloud_png(counter: Counter, save_path: str, title_hint: str = None):
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     if not counter:
-        # 空数据也生成一张占位图（WordCloud 需要至少一个词）
         counter = Counter({"NoKeywords": 1})
 
-    # 不截断：把全部出现的类别都画进去
     max_words = len(counter)
 
     wc = WordCloud(
@@ -225,14 +247,13 @@ def make_wordcloud_png(counter: Counter, save_path: str, title_hint: str = None)
         font_path=pick_font(),
         collocations=False,
         max_words=max_words,
-        # 注意：在 SVG 版本中会嵌入位图；这里我们直接导出 PNG
     ).generate_from_frequencies(dict(counter))
 
     wc.to_file(save_path)
 
 def main():
-    titles_text = collect_titles_text()
-    freq = count_by_categories(titles_text)
+    # 原逻辑（整段文本计数）保留在函数里，这里改为“按文件去重统计”
+    freq = count_by_categories_one_per_file()
     make_wordcloud_png(freq, TITLE_PNG)
     print(f"[OK] 词云已生成：{TITLE_PNG}")
     if not pick_font():
