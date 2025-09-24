@@ -1,0 +1,58 @@
+name: Update Algorithm Word Cloud
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - '**.md'
+
+jobs:
+  update-wordcloud:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: pip install wordcloud pillow
+
+    - name: Check and install Chinese fonts
+      run: |
+        if [ -f "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc" ]; then
+          echo "Noto CJK 字已存在"
+        else
+          echo "安装中文字体..."
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+          echo "字体安装完成"
+        fi
+
+    - name: Run word cloud generator
+      env:
+        FONT_PATH: "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+      run: |
+        python REgen_wordcloud.py
+
+    - name: Commit and push if changed
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add ./images/00.png
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "🤖 Auto-update algorithm word cloud"
+          git push
+        fi
