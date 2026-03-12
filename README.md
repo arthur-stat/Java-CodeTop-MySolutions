@@ -7,6 +7,6 @@
 
 [我的力扣主页](https://leetcode.cn/u/6racious-vaughanr63/)
 
-![00](images/00.png)
+![00](https://github.com/arthur-stat/Java-CodeTop-MySolutions/releases/download/wordcloud-latest/00.png)
 
-↑ 运行 `python .\REgen_wordcloud.py`，根据各文章标题所生成的关键词图文
+↑ 提交后将自动运行 `REgen_wordcloud.py`，根据各文章标题生成关键词图文，并更新固定 Release Asset。

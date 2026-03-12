@@ -9,16 +9,17 @@ on:
 jobs:
   update-wordcloud:
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: write
-    
+
+    env:
+      RELEASE_TAG: wordcloud-latest
+      RELEASE_TITLE: Algorithm Word Cloud
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -45,14 +46,22 @@ jobs:
       run: |
         python REgen_wordcloud.py
 
-    - name: Commit and push if changed
+    - name: Ensure fixed release exists
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "github-actions[bot]"
-        git add ./images/00.png
-        if git diff --staged --quiet; then
-          echo "No changes to commit"
+        if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+          echo "Release $RELEASE_TAG already exists"
         else
-          git commit -m "🤖 Auto-update algorithm word cloud"
-          git push
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_TITLE" \
+            --notes "Latest generated algorithm word cloud."
         fi
+
+    - name: Upload word cloud asset
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release upload "$RELEASE_TAG" ./images/00.png#00.png --repo "$GITHUB_REPOSITORY" --clobber
